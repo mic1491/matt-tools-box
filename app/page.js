@@ -50,6 +50,89 @@ const renderMemoContent = (text) => {
   });
 };
 
+// 子元件：日曆模組 (移至外層防止 re-render 閃爍)
+const CalendarModule = ({ style }) => (
+  <div className="module-card" style={style}>
+    <div className="module-header">
+      <CalendarIcon size={18} color="var(--accent-color)" />
+      Google 日曆
+    </div>
+    <div className="module-body" style={{ padding: 0 }}>
+      <iframe 
+        src="https://calendar.google.com/calendar/embed?src=mic1491%40gmail.com&height=600&wkst=1&bgcolor=%23ffffff&ctz=Asia%2FTaipei&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&color=%230B8043" 
+        className="iframe-wrapper"
+        title="Google Calendar"
+      />
+    </div>
+  </div>
+);
+
+// 子元件：當月重要任務模組 (移至外層防止 re-render 閃爍)
+const TodoListModule = ({ style }) => (
+  <div className="module-card" style={style}>
+    <div className="module-header">
+      <CheckCircle2 size={18} color="var(--accent-color)" />
+      當月重要任務清單
+    </div>
+    <div className="module-body" style={{ padding: '1rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {[
+          { id: 1, text: '繳納本期燃料費及牌照稅', date: '04/10' },
+          { id: 2, text: '結算上月工作室信用卡帳單', date: '04/15' },
+          { id: 3, text: '回覆系統開發專案客戶信件', date: '04/18' },
+          { id: 4, text: '進行每週專案同步例會', date: '04/22' }
+        ].map((item) => (
+          <div key={item.id} style={{ 
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '0.75rem', background: 'rgba(255,255,255,0.7)',
+            borderRadius: '8px', border: '1px solid var(--border-color)'
+          }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{item.text}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
+              {item.date}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 'auto', paddingTop: '1rem', textAlign: 'center' }}>
+        <button style={{
+          background: 'transparent', border: '1px dashed var(--accent-color)', color: 'var(--accent-color)',
+          padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', width: '100%'
+        }}>+ 新增任務項目</button>
+      </div>
+    </div>
+  </div>
+);
+
+// 子元件：密碼本模組 (移至外層防止 re-render 閃爍)
+const VaultModule = ({ style }) => (
+  <div className="module-card" style={style}>
+    <div className="module-header" style={{ justifyContent: 'space-between' }}>
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <ShieldCheck size={18} color="var(--accent-color)" />
+        My Vault 密碼庫
+      </div>
+      <a href="https://mic1491.github.io/my-vault/" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>另開視窗 ↗</a>
+    </div>
+    <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
+      <iframe src="https://mic1491.github.io/my-vault/" className="iframe-wrapper" title="Password Vault" />
+    </div>
+  </div>
+);
+
+// 子元件：Google Drive 模組 (移至外層防止 re-render 閃爍)
+const DriveModule = ({ style, driveEmbedUrl }) => (
+  <div className="module-card" style={style}>
+    <div className="module-header">
+      <Cloud size={18} color="var(--accent-color)" />
+      個人雲端硬碟區
+    </div>
+    <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
+      <iframe src={driveEmbedUrl} className="iframe-wrapper" title="Google Drive" />
+    </div>
+  </div>
+);
+
 export default function Dashboard() {
   const [time, setTime] = useState('');
   
@@ -63,8 +146,8 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  // Google Drive 寫死的嵌入 URL (待使用者提供替換)
-  const driveEmbedUrl = 'https://drive.google.com/embeddedfolderview?id=請換成您的資料夾ID#grid';
+  // Google Drive URL 修改為您的 ID
+  const driveEmbedUrl = 'https://drive.google.com/embeddedfolderview?id=1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP#grid';
 
   useEffect(() => {
     const updateTime = () => {
@@ -128,59 +211,7 @@ export default function Dashboard() {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  // 子元件：日曆模組
-  const CalendarModule = ({ style }) => (
-    <div className="module-card" style={style}>
-      <div className="module-header">
-        <CalendarIcon size={18} color="var(--accent-color)" />
-        Google 日曆
-      </div>
-      <div className="module-body" style={{ padding: 0 }}>
-        <iframe 
-          src="https://calendar.google.com/calendar/embed?src=mic1491%40gmail.com&height=600&wkst=1&bgcolor=%23ffffff&ctz=Asia%2FTaipei&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&color=%230B8043" 
-          className="iframe-wrapper"
-          title="Google Calendar"
-        />
-      </div>
-    </div>
-  );
-
-  // 子元件：當月重要任務模組 (To-Do List)
-  const TodoListModule = ({ style }) => (
-    <div className="module-card" style={style}>
-      <div className="module-header">
-        <CheckCircle2 size={18} color="var(--accent-color)" />
-        當月重要任務清單
-      </div>
-      <div className="module-body" style={{ padding: '1rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {[
-            { id: 1, text: '繳納本期燃料費及牌照稅', date: '04/10' },
-            { id: 2, text: '結算上月工作室信用卡帳單', date: '04/15' },
-            { id: 3, text: '回覆系統開發專案客戶信件', date: '04/18' },
-            { id: 4, text: '進行每週專案同步例會', date: '04/22' }
-          ].map((item) => (
-            <div key={item.id} style={{ 
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '0.75rem', background: 'rgba(255,255,255,0.7)',
-              borderRadius: '8px', border: '1px solid var(--border-color)'
-            }}>
-              <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{item.text}</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-                {item.date}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 'auto', paddingTop: '1rem', textAlign: 'center' }}>
-          <button style={{
-            background: 'transparent', border: '1px dashed var(--accent-color)', color: 'var(--accent-color)',
-            padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', width: '100%'
-          }}>+ 新增任務項目</button>
-        </div>
-      </div>
-    </div>
-  );
+  // 子部份元件已移至外層以防止不必要的 re-render (閃爍)
 
   // 子元件：備忘錄模組
   const MemoModule = ({ style }) => (
@@ -252,37 +283,13 @@ export default function Dashboard() {
     </div>
   );
 
-  // 子元件：密碼本模組
-  const VaultModule = ({ style }) => (
-    <div className="module-card" style={style}>
-      <div className="module-header" style={{ justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          <ShieldCheck size={18} color="var(--accent-color)" />
-          My Vault 密碼庫
-        </div>
-        <a href="https://mic1491.github.io/my-vault/" target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textDecoration: 'none' }}>另開視窗 ↗</a>
-      </div>
-      <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
-        <iframe src="https://mic1491.github.io/my-vault/" className="iframe-wrapper" title="Password Vault" />
-      </div>
-    </div>
-  );
-
-  // 子元件：Google Drive 模組
-  const DriveModule = ({ style }) => (
-    <div className="module-card" style={style}>
-      <div className="module-header">
-        <Cloud size={18} color="var(--accent-color)" />
-        個人雲端硬碟區
-      </div>
-      <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
-        <iframe src={driveEmbedUrl} className="iframe-wrapper" title="Google Drive" />
-      </div>
-    </div>
-  );
-
   return (
-    <div className="dashboard-container">
+    <div className="dashboard-container" style={{
+      /* 直接在 inline-style 確保 Apple Studio 風格漸層生效 */
+      background: 'linear-gradient(135deg, #e0e5ec 0%, #ffffff 50%, #e2e8f0 100%)',
+      /* 提供一種有細微金屬拉絲/冷色調的感覺 */
+      backgroundColor: '#f1f5f9'
+    }}>
       
       {/* Sidebar */}
       <aside className="sidebar" style={{ backgroundColor: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)' }}>
@@ -345,7 +352,7 @@ export default function Dashboard() {
                 
                 {/* 第二欄：雲端硬碟與備忘錄 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
-                  <DriveModule style={{ height: '350px', flexShrink: 0 }} />
+                  <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '350px', flexShrink: 0 }} />
                   <MemoModule style={{ flex: 1, minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
                 </div>
                 
@@ -358,7 +365,7 @@ export default function Dashboard() {
             {activeTab === 'calendar' && <CalendarModule style={{ height: '100%' }} />}
             {activeTab === 'memo' && <MemoModule style={{ height: '100%' }} />}
             {activeTab === 'vault' && <VaultModule style={{ height: '100%' }} />}
-            {activeTab === 'drive' && <DriveModule style={{ height: '100%' }} />}
+            {activeTab === 'drive' && <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '100%' }} />}
 
           </div>
         </section>
