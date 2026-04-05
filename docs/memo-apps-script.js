@@ -393,8 +393,12 @@ function uploadPhoto(filename, mimeType, base64Data, folderId) {
     const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, filename);
     const file = folder.createFile(blob);
     
-    // 設定這張圖片為任何人可檢視 (直連預覽用)
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    try {
+      // 嘗試設定這張圖片為任何人可檢視 (直連預覽用)
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (shareErr) {
+      console.log('無法自動設定權限，略過:', shareErr);
+    }
     
     const fileId = file.getId();
     const directUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
