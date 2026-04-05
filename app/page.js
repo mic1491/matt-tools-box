@@ -285,11 +285,13 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-container" style={{
-      /* 直接在 inline-style 確保 Apple Studio 風格漸層生效 */
-      background: 'linear-gradient(135deg, #e0e5ec 0%, #ffffff 50%, #e2e8f0 100%)',
-      /* 提供一種有細微金屬拉絲/冷色調的感覺 */
-      backgroundColor: '#f1f5f9'
+      backgroundImage: `url(${basePath}/bg.png)`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundAttachment: 'fixed'
     }}>
+      {/* 讓寫實的背景圖上面墊一層玻璃遮罩，確保介面清晰度 */}
+      <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(235, 240, 245, 0.4)', backdropFilter: 'blur(8px)', zIndex: 0 }}></div>
       
       {/* Sidebar */}
       <aside className="sidebar" style={{ backgroundColor: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)' }}>
