@@ -23,6 +23,15 @@ function initializeSheet() {
   SpreadsheetApp.getUi().alert('多筆備忘清單架構初始化完成！');
 }
 
+// 供初次加入雲端硬碟權限時使用
+function setupPermissions() {
+  // 當遇到權限不足的錯誤時，請在編輯器選擇這個函數並點擊「執行」
+  // 藉此強制呼叫 Google API 以觸發「審查權限」的流程對話框。
+  DriveApp.getRootFolder();
+  SpreadsheetApp.getActiveSpreadsheet();
+  console.log("權限審查已成功完成！");
+}
+
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
   if (action === 'getMemos') {
