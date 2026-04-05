@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Matt\\'s Tools Box',
+  title: "Matt's Tools Box",
   description: 'Personal toolkit and dashboard.',
 };
 

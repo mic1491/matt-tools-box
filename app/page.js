@@ -76,7 +76,7 @@ export default function Dashboard() {
       <aside className="sidebar">
         <div className="sidebar-brand">
           <LayoutDashboard size={24} />
-          Matt's Tools
+          Matt&apos;s Tools
         </div>
         
         <nav className="sidebar-nav">
