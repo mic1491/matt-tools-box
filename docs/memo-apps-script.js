@@ -26,8 +26,12 @@ function initializeSheet() {
 // 供初次加入雲端硬碟權限時使用
 function setupPermissions() {
   // 當遇到權限不足的錯誤時，請在編輯器選擇這個函數並點擊「執行」
-  // 藉此強制呼叫 Google API 以觸發「審查權限」的流程對話框。
-  DriveApp.getRootFolder();
+  // 藉此強制呼叫 Google API 以觸發完整的「讀取與寫入」權限對話框。
+  
+  // 建立一個暫時檔案並立刻丟入垃圾桶，用以強制觸發 createFile 寫入權限
+  const dummy = DriveApp.createFile('dummy_permission_test.txt', 'test');
+  dummy.setTrashed(true);
+  
   SpreadsheetApp.getActiveSpreadsheet();
   console.log("權限審查已成功完成！");
 }
