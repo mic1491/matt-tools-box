@@ -1,21 +1,34 @@
 // ============================================================
 // Matt's 助理 - 小蝦  LINE Bot  (Google Apps Script)
-// 部署說明：貼入新的 GAS 專案 → 部署為 Web App → 設為「任何人」可存取
+//
+// 🔐 安全設定：所有金鑰存在 GAS 指令碼屬性，不寫在程式碼裡
+// 設定路徑：GAS 編輯器 → 左側⚙️專案設定 → 指令碼屬性 → 新增：
+//   LINE_CHANNEL_SECRET  → 你的 Channel Secret
+//   LINE_ACCESS_TOKEN    → 你的 Channel Access Token
+//   GEMINI_API_KEY       → 你的 Gemini API Key（選填）
+//
+// 部署說明：部署為 Web App → 以你的帳號執行 → 任何人可存取
 // 首次設定：手動執行 setupTriggers() 一次
 // ============================================================
 
+// 從 GAS Script Properties 讀取機密（不暴露在程式碼）
+const _PROPS = PropertiesService.getScriptProperties();
+
 const CFG = {
-  LINE_CHANNEL_SECRET : '9cb2cb6f5407e7a4c64338dd528614c9',
-  LINE_ACCESS_TOKEN   : 'x/AH16aEGLLZbWLkz0CFpTWrwU3RwxTFB1w7Go3dHrQb/uURPbpXhe1lBTO7DvWlcIEKl27cRIZbJPCpOBvNxvXbrlNMusr3ZNdkKWezDVpCqeT4dePfxuJ2s4Kp/0/knZgWJhdZIlbJFWvB7QojigdB04t89/1O/w1cDnyilFU=',
-  BOT_NAME            : "Matt's 助理-小蝦",
-  OWNER_NAME          : 'Matt',   // 小蝦記住的名字，改這裡就行
-  CITY_NAME           : '新竹竹北',
-  WEATHER_LAT         : 24.8398,
-  WEATHER_LON         : 121.0047,
-  GEMINI_API_KEY      : '',       // 選填：填入後閒聊回覆更自然
-  CALENDAR_ID         : 'primary',
-  MORNING_HOUR        : 8,
-  REMINDER_MINUTES    : 30,
+  // 🔐 機密：從 Script Properties 讀取
+  LINE_CHANNEL_SECRET : _PROPS.getProperty('LINE_CHANNEL_SECRET') || '',
+  LINE_ACCESS_TOKEN   : _PROPS.getProperty('LINE_ACCESS_TOKEN')   || '',
+  GEMINI_API_KEY      : _PROPS.getProperty('GEMINI_API_KEY')      || '',
+
+  // ✏️ 可公開的設定，直接改這裡
+  BOT_NAME          : "Matt's 助理-小蝦",
+  OWNER_NAME        : 'Matt',       // 小蝦叫你的名字
+  CITY_NAME         : '新竹竹北',
+  WEATHER_LAT       : 24.8398,
+  WEATHER_LON       : 121.0047,
+  CALENDAR_ID       : 'primary',
+  MORNING_HOUR      : 8,            // 早報推播時間
+  REMINDER_MINUTES  : 30,           // 活動提前幾分鐘提醒
 };
 
 // ============================================================
@@ -45,7 +58,8 @@ function welcomeMsg() {
   const n = CFG.OWNER_NAME;
   return `嗨嗨！我是小蝦 🦐 ${n} 的貼身助理上線囉！\n\n` +
     `我可以：\n📅 查行程（今日 / 本週 / 本月）\n` +
-    `➕ 新增：明天下午3點 開會\n🗑 刪除：開會\n🌤 天氣\n📰 新聞\n\n` +
+    `➕ 新增：明天下午3點 開會\n🗑 刪除：開會\n` +
+    `🌤 天氣\n📰 新聞\n💬 陪你聊天\n\n` +
     `${n}！有事盡管找我，我很熱情的！😆`;
 }
 
@@ -60,17 +74,17 @@ function handleMessage(replyToken, t) {
   if (/最近|接下來|即將|近期/.test(t))   return replyText(replyToken, getUpcomingEvents(7));
 
   const addM = t.match(/^新增[：:]\s*(.+)/);
-  if (addM)  return replyText(replyToken, addCalendarEvent(addM[1]));
+  if (addM) return replyText(replyToken, addCalendarEvent(addM[1]));
 
   const delM = t.match(/^(?:刪除|移除)[：:]\s*(.+)/);
-  if (delM)  return replyText(replyToken, deleteCalendarEvent(delM[1]));
+  if (delM) return replyText(replyToken, deleteCalendarEvent(delM[1]));
 
   if (/天氣|氣象|溫度|下雨|晴|幾度/.test(t)) return replyText(replyToken, getWeather());
   if (/新聞|頭條|快訊|時事/.test(t))         return replyText(replyToken, getNews());
   if (/功能|幫助|help|說明|怎麼用/.test(t))  return replyText(replyToken, getHelp());
 
-  const reply = CFG.GEMINI_API_KEY ? askGemini(t) : defaultReply(t);
-  replyText(replyToken, reply);
+  // 所有非指令文字 → 走 Gemini AI 聊天
+  replyText(replyToken, chat(t));
 }
 
 // ============================================================
@@ -104,7 +118,6 @@ function buildEventList(start, end, label) {
     const cal    = CalendarApp.getCalendarById(CFG.CALENDAR_ID) || CalendarApp.getDefaultCalendar();
     const events = cal.getEvents(start, end);
     if (!events.length) return `${label}沒有行程 ✨\n趁機好好休息吧 😊`;
-
     const lines = [`📅 ${label}行程（共 ${events.length} 筆）：\n`];
     events.forEach((ev, i) => {
       const s    = ev.getStartTime();
@@ -119,7 +132,7 @@ function addCalendarEvent(text) {
   try {
     const p = parseEventText(text);
     if (!p) return '格式不對耶 😅\n試試：新增：明天下午3點 跑步';
-    const cal   = CalendarApp.getCalendarById(CFG.CALENDAR_ID) || CalendarApp.getDefaultCalendar();
+    const cal  = CalendarApp.getCalendarById(CFG.CALENDAR_ID) || CalendarApp.getDefaultCalendar();
     cal.createEvent(p.title, p.start, new Date(p.start.getTime() + 3600000));
     const ds = `${p.start.getMonth()+1}/${p.start.getDate()} ${pad(p.start.getHours())}:${pad(p.start.getMinutes())}`;
     return `✅ 搞定！\n「${p.title}」已加入行事曆\n📅 ${ds}\n\n${CFG.OWNER_NAME} 你真的很充實！💪`;
@@ -127,9 +140,9 @@ function addCalendarEvent(text) {
 }
 
 function parseEventText(text) {
-  const now = new Date(); let dt = new Date(now);
-  if (/明天|明日/.test(text))   dt.setDate(now.getDate() + 1);
-  else if (/後天/.test(text))   dt.setDate(now.getDate() + 2);
+  const now = new Date(); const dt = new Date(now);
+  if (/明天|明日/.test(text)) dt.setDate(now.getDate() + 1);
+  else if (/後天/.test(text)) dt.setDate(now.getDate() + 2);
   else {
     const m = text.match(/(\d{1,2})[\/月](\d{1,2})[日號]?/);
     if (m) { dt.setMonth(parseInt(m[1])-1); dt.setDate(parseInt(m[2])); }
@@ -174,7 +187,6 @@ const WMO = {
   80:'🌦 陣雨',81:'⛈ 大陣雨',82:'⛈ 暴雨',95:'⛈ 雷雨',96:'⛈ 雷雨冰雹',99:'⛈ 強雷雨'
 };
 
-// 取得結構化天氣資料
 function fetchWeatherData() {
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${CFG.WEATHER_LAT}&longitude=${CFG.WEATHER_LON}` +
     `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weathercode` +
@@ -182,7 +194,6 @@ function fetchWeatherData() {
   return JSON.parse(UrlFetchApp.fetch(url, {muteHttpExceptions:true}).getContentText());
 }
 
-// 根據天氣狀況產生情境化小提醒（回傳字串）
 function smartWeatherTip(cur, daily) {
   const n    = CFG.OWNER_NAME;
   const temp = Math.round(cur.temperature);
@@ -191,18 +202,12 @@ function smartWeatherTip(cur, daily) {
   const hi   = Math.round(daily.temperature_2m_max[0]);
   const lo   = Math.round(daily.temperature_2m_min[0]);
 
-  if (rain >= 70)
-    return `${n}！今天降雨機率高達 ${rain}%，快下雨了！🌧 出門前一定要帶傘，別把我的叮嚀當耳邊風 😆`;
-  if (rain >= 40)
-    return `${n}，今天有 ${rain}% 機率會下雨，建議備個傘以防萬一 ☂️`;
-  if (temp <= 14)
-    return `${n} 今天超冷的！🥶 ${temp}°C！多加一件外套，小心感冒喔！`;
-  if (hi >= 33)
-    return `今天最高 ${hi}°C！🔥 熱翻天！${n} 記得多喝水、防曬，室外少待！`;
-  if ((hi - lo) >= 10)
-    return `${n}，今天早晚溫差大（${lo}～${hi}°C），出門帶件薄外套保平安 🧥`;
-  if ([0, 1].includes(code))
-    return `今天天氣超棒的！☀️ ${n} 要不要趁機出去走走放鬆一下？`;
+  if (rain >= 70)        return `${n}！今天降雨機率高達 ${rain}%，快下雨了！🌧 出門前一定要帶傘！`;
+  if (rain >= 40)        return `${n}，今天有 ${rain}% 機率會下雨，建議備個傘以防萬一 ☂️`;
+  if (temp <= 14)        return `${n} 今天超冷的！🥶 ${temp}°C！多加一件外套，小心感冒！`;
+  if (hi >= 33)          return `今天最高 ${hi}°C！🔥 熱翻天！${n} 記得多喝水、防曬，室外少待！`;
+  if ((hi - lo) >= 10)  return `${n}，今天早晚溫差大（${lo}～${hi}°C），出門帶件薄外套保平安 🧥`;
+  if ([0,1].includes(code)) return `今天天氣超棒！☀️ ${n} 要不要趁機出去走走放鬆一下？`;
   return `天氣還不錯，${n} 出門備傘就萬全囉 😊`;
 }
 
@@ -211,7 +216,6 @@ function getWeather() {
     const data = fetchWeatherData();
     const cur  = data.current_weather, d = data.daily;
     const days = ['今天','明天','後天'];
-
     let msg = `🌡 ${CFG.CITY_NAME} 天氣（現在 ${Math.round(cur.temperature)}°C）\n\n`;
     for (let i = 0; i < 3; i++) {
       msg += `${days[i]}：${WMO[d.weathercode[i]] || '未知'}\n`;
@@ -240,14 +244,10 @@ function getNews() {
         const ns   = root.getName() === 'feed' ? root.getNamespace() : null;
         let items  = [];
         if (ns) {
-          items = root.getChildren('entry', ns).slice(0, 5).map(en => ({
-            title: en.getChildText('title', ns)
-          }));
+          items = root.getChildren('entry', ns).slice(0, 5).map(en => ({ title: en.getChildText('title', ns) }));
         } else {
           const ch = root.getChild('channel');
-          items = (ch || root).getChildren('item').slice(0, 5).map(it => ({
-            title: it.getChildText('title')
-          }));
+          items = (ch || root).getChildren('item').slice(0, 5).map(it => ({ title: it.getChildText('title') }));
         }
         if (items.length) {
           let msg = '📰 今日 5 則新聞：\n\n';
@@ -261,42 +261,97 @@ function getNews() {
 }
 
 // ============================================================
-// 🤖  Gemini AI 對話（若有填 API Key）
+// 🤖  Gemini AI 聊天（有填 API Key 才啟用）
 // ============================================================
 
-function askGemini(text) {
+// 對話歷史記憶（存在 Script Properties，最多保留 6 輪）
+const HISTORY_KEY  = 'CHAT_HISTORY';
+const MAX_HISTORY  = 6;  // 保留最近幾輪對話
+
+function getHistory() {
   try {
-    const n      = CFG.OWNER_NAME;
-    const prompt = `你是「小蝦」，${n} 的私人助理，個性熱情開朗、幽默風趣，` +
-      `用繁體中文說話，語氣像好朋友，回覆不超過80字。\n${n} 說：${text}`;
-    const res = UrlFetchApp.fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CFG.GEMINI_API_KEY}`,
-      { method:'post', contentType:'application/json', muteHttpExceptions:true,
-        payload: JSON.stringify({contents:[{parts:[{text:prompt}]}]}) }
-    );
-    return JSON.parse(res.getContentText())?.candidates?.[0]?.content?.parts?.[0]?.text || defaultReply(text);
-  } catch(e) { return defaultReply(text); }
+    const raw = _PROPS.getProperty(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e) { return []; }
 }
 
-function defaultReply(text) {
+function saveHistory(history) {
+  // 只保留最近 MAX_HISTORY 輪
+  const trimmed = history.slice(-MAX_HISTORY * 2);
+  _PROPS.setProperty(HISTORY_KEY, JSON.stringify(trimmed));
+}
+
+function clearHistory() {
+  _PROPS.deleteProperty(HISTORY_KEY);
+}
+
+function chat(userText) {
   const n = CFG.OWNER_NAME;
-  if (/你好|嗨|嘿|哈囉/.test(text)) {
-    const rs = [
-      `嗨嗨 ${n}！有什麼我可以幫你的？😊`,
-      `我在我在！${n} 說吧 🦐`,
-      `嗨！${n} 今天氣色不錯耶 💪`,
-    ];
-    return rs[Math.floor(Math.random() * rs.length)];
+
+  // 沒有 Gemini Key → 走備用回覆
+  if (!CFG.GEMINI_API_KEY) {
+    if (/你好|嗨|嘿|哈囉/.test(userText)) {
+      const rs = [
+        `嗨嗨 ${n}！有什麼我可以幫你的？😊`,
+        `我在我在！${n} 說吧 🦐`,
+        `嗨！${n} 今天氣色不錯耶 💪`,
+      ];
+      return rs[Math.floor(Math.random() * rs.length)];
+    }
+    return `嗯嗯聽到了！但小蝦不太懂你的意思 🦐\n${n}，說「功能」看看我能做什麼吧！`;
   }
-  return `嗯嗯聽到了！但小蝦不太懂你的意思 🦐\n${n}，說「功能」看看我能做什麼吧！`;
+
+  // 有 Key → 呼叫 Gemini，帶上對話歷史
+  try {
+    const history = getHistory();
+
+    // System prompt：小蝦的人格設定
+    const systemPrompt = `你是「小蝦」，${n} 的私人助理兼好朋友。
+個性：熱情開朗、幽默風趣、有點可愛。
+語言：繁體中文，語氣像親密好友，偶爾用台灣慣用語。
+回覆：簡潔有力，不超過 120 字，不說廢話。
+重要：你記得和 ${n} 說過的話，會自然延續對話脈絡。`;
+
+    // 組合 Gemini messages 格式
+    const messages = [
+      { role: 'user',  parts: [{ text: systemPrompt }] },
+      { role: 'model', parts: [{ text: `好的！我是小蝦 🦐，${n} 有什麼需要？` }] },
+      ...history,
+      { role: 'user',  parts: [{ text: userText }] },
+    ];
+
+    const res = UrlFetchApp.fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CFG.GEMINI_API_KEY}`,
+      {
+        method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+        payload: JSON.stringify({ contents: messages })
+      }
+    );
+
+    const reply = JSON.parse(res.getContentText())?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reply) return `小蝦突然當機了 😅 稍後再試試看！`;
+
+    // 儲存這輪對話到歷史
+    history.push({ role: 'user',  parts: [{ text: userText }] });
+    history.push({ role: 'model', parts: [{ text: reply }] });
+    saveHistory(history);
+
+    return reply;
+  } catch(e) {
+    console.error('Gemini error:', e);
+    return `小蝦腦筋卡住了！稍後再聊 😂`;
+  }
 }
 
 function getHelp() {
   const n = CFG.OWNER_NAME;
+  const hasAI = CFG.GEMINI_API_KEY ? '✅ 已啟用（可以陪聊天！）' : '❌ 未設定（填入 Gemini Key 後啟用）';
   return `🦐 小蝦功能清單\n\n` +
     `📅 行事曆\n今日行程 / 本週行程 / 本月行程 / 最近行程\n` +
     `新增：明天下午3點 開會\n刪除：開會\n\n` +
-    `🌤 天氣（直接說「天氣」）\n📰 新聞（直接說「新聞」）\n\n` +
+    `🌤 天氣（直接說「天氣」）\n` +
+    `📰 新聞（直接說「新聞」）\n` +
+    `💬 AI 聊天：${hasAI}\n\n` +
     `⏰ 自動推播：\n每日 ${CFG.MORNING_HOUR}:00 天氣早報 + 今日行程\n` +
     `每週一 本週行程摘要\n活動前 ${CFG.REMINDER_MINUTES} 分鐘提醒\n\n` +
     `${n}，有事盡管找我！`;
@@ -307,11 +362,10 @@ function getHelp() {
 // ============================================================
 
 function dailyMorningReport() {
-  const userId = PropertiesService.getScriptProperties().getProperty('USER_LINE_ID');
+  const userId = _PROPS.getProperty('USER_LINE_ID');
   if (!userId) return;
   const n = CFG.OWNER_NAME;
 
-  // 取天氣並產生情境提醒
   let weatherBlock = '', tip = '';
   try {
     const data = fetchWeatherData();
@@ -341,14 +395,14 @@ function dailyMorningReport() {
 }
 
 function weeklyReport() {
-  const userId = PropertiesService.getScriptProperties().getProperty('USER_LINE_ID');
+  const userId = _PROPS.getProperty('USER_LINE_ID');
   if (!userId) return;
   const n = CFG.OWNER_NAME;
   pushMessage(userId, `📅 週一早安 ${n}！新的一週開始囉！\n\n${getWeekEvents()}\n\n本週加油！小蝦幫你打氣 🎉`);
 }
 
 function eventReminder() {
-  const userId = PropertiesService.getScriptProperties().getProperty('USER_LINE_ID');
+  const userId = _PROPS.getProperty('USER_LINE_ID');
   if (!userId) return;
   const n   = CFG.OWNER_NAME;
   const now  = new Date(), soon = new Date(now.getTime() + CFG.REMINDER_MINUTES * 60000);
@@ -356,9 +410,7 @@ function eventReminder() {
   cal.getEvents(now, soon).forEach(ev => {
     const left = Math.round((ev.getStartTime() - now) / 60000);
     if (left > 0) {
-      pushMessage(userId,
-        `⏰ ${n}！「${ev.getTitle()}」還有 ${left} 分鐘開始囉！\n快準備一下！小蝦幫你加油 🦐💨`
-      );
+      pushMessage(userId, `⏰ ${n}！「${ev.getTitle()}」還有 ${left} 分鐘開始囉！\n快準備一下！小蝦幫你加油 🦐💨`);
     }
   });
 }
@@ -393,9 +445,9 @@ function pushMessage(userId, text) {
 }
 
 function saveUserId(userId) {
-  if (userId) PropertiesService.getScriptProperties().setProperty('USER_LINE_ID', userId);
+  if (userId) _PROPS.setProperty('USER_LINE_ID', userId);
 }
 
 function pad(n)      { return String(n).padStart(2, '0'); }
-function dayStart(d) { d.setHours(0,0,0,0);       return d; }
-function dayEnd(d)   { d.setHours(23,59,59,999);   return d; }
+function dayStart(d) { d.setHours(0,0,0,0);      return d; }
+function dayEnd(d)   { d.setHours(23,59,59,999);  return d; }
