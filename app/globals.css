@@ -270,11 +270,14 @@ body {
     gap: 1rem;
     height: auto !important; /* Override inline heights */
   }
-  /* 將佈局改為垂直，且將原本在左邊的 Sidebar 移到下方變成底端導覽列 */
+  /* 將佈局改為 block，讓 fixed 定位接管 Sidebar */
   .dashboard-container { 
-    flex-direction: column-reverse; 
+    display: block;
   }
   .sidebar { 
+    position: fixed;
+    bottom: 0;
+    left: 0;
     width: 100%; 
     height: 65px; 
     flex-direction: row; 
@@ -315,7 +318,8 @@ body {
     padding: calc(env(safe-area-inset-top, 0px) + 0.75rem) 1rem 0.75rem; 
   }
   .main-wrapper {
-    height: calc(100vh - 65px);
+    height: 100vh; /* fallback */
+    height: calc(100dvh - 65px);
   }
   .content-area { 
     padding: 0.75rem; 
@@ -330,5 +334,9 @@ body {
   .module-card {
     height: auto !important;
     min-height: 400px;
+  }
+  /* 給 iframe 充足的高度以防止下方功能被裁切 */
+  .iframe-wrapper {
+    min-height: 650px;
   }
 }
