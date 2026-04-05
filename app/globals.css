@@ -260,6 +260,63 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ====== react-grid-layout 拖曳模組樣式 ====== */
+
+/* 每個 RGL cell 填滿卡片、隱藏 overflow */
+.layout > div {
+  position: relative;
+}
+
+/* 拖曳把手：固定在 module-card 標題右上角 */
+.drag-handle {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 10;
+  color: var(--text-secondary);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+}
+.layout > div:hover .drag-handle {
+  opacity: 1;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 拖曳中的卡片 */
+.react-grid-item.react-draggable-dragging {
+  opacity: 0.85;
+  z-index: 100 !important;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.18) !important;
+  transform-origin: center center;
+}
+
+/* resize 控點美化 */
+.react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.layout > div:hover .react-resizable-handle {
+  opacity: 1;
+}
+.react-resizable-handle::after {
+  border-color: var(--accent-color) !important;
+}
+
+/* RGL placeholder (拖曳中的目標位置) */
+.react-grid-item.react-grid-placeholder {
+  background: rgba(0, 113, 227, 0.08) !important;
+  border: 2px dashed rgba(0, 113, 227, 0.4) !important;
+  border-radius: 20px !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+
 @media (max-width: 1024px) {
   .dashboard-grid { grid-template-columns: 1fr 1fr; }
 }

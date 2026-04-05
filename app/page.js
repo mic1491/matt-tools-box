@@ -1,7 +1,18 @@
 'use client';
 
 import './globals.css';
+import 'react-grid-layout/css/styles.css';
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+
+// 要避免 SSR 直接專属 Client 的 drag library - 必須用 dynamic + WidthProvider
+const ResponsiveGridLayout = dynamic(
+  async () => {
+    const { Responsive, WidthProvider } = await import('react-grid-layout');
+    return WidthProvider(Responsive);
+  },
+  { ssr: false }
+);
 import { 
   LayoutDashboard, 
   Calendar as CalendarIcon, 
@@ -20,7 +31,9 @@ import {
   Image as ImageIcon,
   Play,
   Pause,
-  Plus
+  Plus,
+  RotateCcw,
+  GripHorizontal
 } from 'lucide-react';
 import { 
   fetchMemos, addMemo, deleteMemo, uploadFileToDrive, 
@@ -47,6 +60,32 @@ const ClockWidget = () => {
 };
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+
+// 預設佈局設定（以 12 欄為底、rowHeight=60px）
+const DEFAULT_LAYOUT = [
+  { i: 'carousel',  x: 0,  y: 0,  w: 4,  h: 5,  minW: 2, minH: 3  },
+  { i: 'todo',      x: 0,  y: 5,  w: 4,  h: 6,  minW: 2, minH: 3  },
+  { i: 'calendar',  x: 0,  y: 11, w: 4,  h: 9,  minW: 3, minH: 5  },
+  { i: 'drive',     x: 4,  y: 0,  w: 5,  h: 7,  minW: 3, minH: 4  },
+  { i: 'memo',      x: 4,  y: 7,  w: 5,  h: 9,  minW: 2, minH: 4  },
+  { i: 'vault',     x: 9,  y: 0,  w: 3,  h: 9,  minW: 2, minH: 5  },
+  { i: 'bookmark',  x: 9,  y: 9,  w: 3,  h: 7,  minW: 2, minH: 3  },
+];
+
+const LAYOUT_STORAGE_KEY = 'matt-dashboard-layout';
+
+const loadLayout = () => {
+  if (typeof window === 'undefined') return DEFAULT_LAYOUT;
+  try {
+    const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_LAYOUT;
+  } catch { return DEFAULT_LAYOUT; }
+};
+
+const saveLayout = (layout) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout));
+};
 
 // 將帶有網址的文字轉成 JSX a tag (Apple 風格藥丸標籤)
 const renderMemoContent = (text) => {
@@ -224,16 +263,35 @@ const DriveModule = ({ style, driveEmbedUrl }) => {
 export default function Dashboard() {
   const [time, setTime] = useState('');
   const contentRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [gridLayout, setGridLayout] = useState(DEFAULT_LAYOUT);
   
   // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive', 'bookmark'
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // 切換 Tab 時自動捲回最上方 (解決手機切換後畫面偏下的問題)
+  // 切換 Tab 時自動捲回最上方
   useEffect(() => {
-    if (contentRef.current) {
-      contentRef.current.scrollTop = 0;
-    }
+    if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [activeTab]);
+
+  // 偵測手機與讀取存儲的佈局
+  useEffect(() => {
+    setIsMobile(window.innerWidth <= 768);
+    setGridLayout(loadLayout());
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleLayoutChange = (layout) => {
+    setGridLayout(layout);
+    saveLayout(layout);
+  };
+
+  const handleResetLayout = () => {
+    setGridLayout(DEFAULT_LAYOUT);
+    localStorage.removeItem(LAYOUT_STORAGE_KEY);
+  };
   
   // 備忘錄狀態
   const [memos, setMemos] = useState([]);
@@ -679,7 +737,23 @@ export default function Dashboard() {
       <main className="main-wrapper" style={{ zIndex: 1 }}>
         <header className="header">
           <div className="header-title">個人儀表板</div>
-          <ClockWidget />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {!isMobile && activeTab === 'dashboard' && (
+              <button
+                onClick={handleResetLayout}
+                title="重置佈局"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  background: 'rgba(0,0,0,0.05)', border: '1px solid var(--border-color)',
+                  borderRadius: '6px', padding: '4px 8px', cursor: 'pointer',
+                  fontSize: '0.75rem', color: 'var(--text-secondary)'
+                }}
+              >
+                <RotateCcw size={12} /> 重置佈局
+              </button>
+            )}
+            <ClockWidget />
+          </div>
         </header>
 
         <section className="content-area" ref={contentRef}>
@@ -687,28 +761,61 @@ export default function Dashboard() {
             
             {/* 首頁總覽 */}
             {activeTab === 'dashboard' && (
-              <div className="dashboard-grid">
-                
-                {/* 第一欄：輪播、日曆與待辦 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
-                  <ImageCarousel style={{ flexShrink: 0, height: '280px' }} />
-                  <TodoModule style={{ flexShrink: 0, maxHeight: '300px' }} />
-                  <CalendarModule style={{ flex: 1, minHeight: '320px' }} />
+              isMobile ? (
+                // === 手機版：固定排版 ===
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <ImageCarousel style={{ height: '250px', flexShrink: 0 }} />
+                  <TodoModule style={{ minHeight: '280px' }} />
+                  <CalendarModule style={{ minHeight: '400px' }} />
+                  <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ minHeight: '350px', flexShrink: 0 }} />
+                  <MemoModule style={{ minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
+                  <VaultModule style={{ minHeight: '500px', flexShrink: 0 }} />
+                  <BookmarkModule style={{ minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
                 </div>
-
-                
-                {/* 第二欄：雲端硬碟與備忘錄 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
-                  <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '350px', flexShrink: 0 }} />
-                  <MemoModule style={{ flex: 1, minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
-                </div>
-                
-                {/* 第三欄：密碼庫與書籤 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
-                  <VaultModule style={{ flexShrink: 0, height: '400px' }} />
-                  <BookmarkModule style={{ flex: 1, display: 'flex', flexDirection: 'column' }} />
-                </div>
-              </div>
+              ) : (
+                // === 桌機版：RGL 拖曳網格 ===
+                <ResponsiveGridLayout
+                  className="layout"
+                  layouts={{ lg: gridLayout }}
+                  breakpoints={{ lg: 1200, md: 996, sm: 768 }}
+                  cols={{ lg: 12, md: 10, sm: 6 }}
+                  rowHeight={60}
+                  margin={[16, 16]}
+                  draggableHandle=".drag-handle"
+                  onLayoutChange={(l) => handleLayoutChange(l)}
+                  useCSSTransforms={true}
+                  style={{ minHeight: '100%' }}
+                >
+                  <div key="carousel">
+                    <ImageCarousel style={{ height: '100%' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="todo">
+                    <TodoModule style={{ height: '100%' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="calendar">
+                    <CalendarModule style={{ height: '100%' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="drive">
+                    <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '100%' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="memo">
+                    <MemoModule style={{ height: '100%', display: 'flex', flexDirection: 'column' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="vault">
+                    <VaultModule style={{ height: '100%' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                  <div key="bookmark">
+                    <BookmarkModule style={{ height: '100%', display: 'flex', flexDirection: 'column' }} />
+                    <div className="drag-handle"><GripHorizontal size={14} /></div>
+                  </div>
+                </ResponsiveGridLayout>
+              )
             )}
 
             {/* 單一 Focus 分頁 */}
