@@ -310,6 +310,10 @@ body {
     color: var(--accent-color);
     background: transparent;
   }
+  .header { 
+    display: flex; 
+    padding: calc(env(safe-area-inset-top, 0px) + 0.75rem) 1rem 0.75rem; 
+  }
   .main-wrapper {
     height: calc(100vh - 65px);
   }
@@ -325,6 +329,6 @@ body {
   }
   .module-card {
     height: auto !important;
-    min-height: 350px;
+    min-height: 400px;
   }
 }

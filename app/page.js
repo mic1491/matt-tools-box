@@ -1,7 +1,7 @@
 'use client';
 
 import './globals.css';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Calendar as CalendarIcon, 
@@ -222,9 +222,18 @@ const DriveModule = ({ style, driveEmbedUrl }) => {
 // ImageCarousel 改為在 Dashboard 內部實作，以存取相簿狀態
 
 export default function Dashboard() {
+  const [time, setTime] = useState('');
+  const contentRef = useRef(null);
   
   // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive', 'bookmark'
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // 切換 Tab 時自動捲回最上方 (解決手機切換後畫面偏下的問題)
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTop = 0;
+    }
+  }, [activeTab]);
   
   // 備忘錄狀態
   const [memos, setMemos] = useState([]);
@@ -427,7 +436,13 @@ export default function Dashboard() {
   const ImageCarousel = ({ style }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isPlaying, setIsPlaying] = useState(true);
-    const displayList = photos.length > 0 ? photos : fallbackImages.map(url => ({ id: url, url, isFallback: true }));
+    
+    // 將舊版被禁用的 Google Drive 直連轉換為最新的 Thumbnail 隱藏通道繞過破圖
+    const getSafeUrl = (rawUrl) => rawUrl ? rawUrl.replace('uc?export=view&id=', 'thumbnail?sz=w1000&id=') : '';
+    
+    const displayList = photos.length > 0 
+      ? photos.map(p => ({ ...p, url: getSafeUrl(p.url) })) 
+      : fallbackImages.map(url => ({ id: url, url, isFallback: true }));
     
     useEffect(() => {
       let timer;
@@ -667,7 +682,7 @@ export default function Dashboard() {
           <ClockWidget />
         </header>
 
-        <section className="content-area">
+        <section className="content-area" ref={contentRef}>
           <div className="animate-fade" style={{ minHeight: '100%' }}>
             
             {/* 首頁總覽 */}
