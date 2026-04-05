@@ -79,6 +79,47 @@ const renderMemoContent = (text) => {
   });
 };
 
+// 工具函式：Canvas 前端智慧圖片壓縮 (解決手機照片太大導致 GAS Payload Error)
+const compressImage = (file, maxWidth = 1200, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        
+        // Convert to File
+        const byteString = atob(dataUrl.split(',')[1]);
+        const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeString });
+        const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: mimeString });
+        resolve(compressedFile);
+      };
+      img.onerror = error => reject(error);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
 // 子元件：日曆模組 (移至外層防止 re-render 閃爍)
 const CalendarModule = ({ style }) => (
   <div className="module-card" style={style}>
@@ -258,13 +299,21 @@ export default function Dashboard() {
 
   // ======= Photos Handlers =======
   const handleUploadPhoto = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const rawFile = e.target.files[0];
+    if (!rawFile) return;
     setPUploading(true);
-    // 傳送圖片到 Drive Folder
-    const res = await uploadCarouselPhotoToDrive(file, '1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP');
-    if (res && res.success && res.item) setPhotos([res.item, ...photos]);
-    else alert('上傳失敗：' + (res.error || '不明錯誤'));
+    
+    try {
+      // 進行無感壓縮
+      const compressedFile = await compressImage(rawFile, 1200, 0.8);
+      // 傳送壓縮後的圖片到 Drive Folder
+      const res = await uploadCarouselPhotoToDrive(compressedFile, '1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP');
+      if (res && res.success && res.item) setPhotos([res.item, ...photos]);
+      else alert('上傳失敗：' + (res.error || '不明錯誤'));
+    } catch (err) {
+      alert('圖片壓縮失敗：' + err.message);
+    }
+    
     setPUploading(false);
     e.target.value = '';
   };
@@ -619,14 +668,14 @@ export default function Dashboard() {
         </header>
 
         <section className="content-area">
-          <div className="animate-fade" style={{ height: '100%' }}>
+          <div className="animate-fade" style={{ minHeight: '100%' }}>
             
             {/* 首頁總覽 */}
             {activeTab === 'dashboard' && (
               <div className="dashboard-grid">
                 
                 {/* 第一欄：輪播、日曆與待辦 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
                   <ImageCarousel style={{ flexShrink: 0, height: '180px' }} />
                   <TodoModule style={{ flexShrink: 0, maxHeight: '350px' }} />
                   <CalendarModule style={{ flex: 1, minHeight: '320px' }} />
@@ -634,13 +683,13 @@ export default function Dashboard() {
 
                 
                 {/* 第二欄：雲端硬碟與備忘錄 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
                   <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '350px', flexShrink: 0 }} />
                   <MemoModule style={{ flex: 1, minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
                 </div>
                 
                 {/* 第三欄：密碼庫與書籤 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
                   <VaultModule style={{ flexShrink: 0, height: '400px' }} />
                   <BookmarkModule style={{ flex: 1, display: 'flex', flexDirection: 'column' }} />
                 </div>

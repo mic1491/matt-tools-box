@@ -265,11 +265,66 @@ body {
 }
 
 @media (max-width: 768px) {
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .dashboard-container { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border-color); flex-direction: row; align-items: center; justify-content: space-between; padding: 0.5rem 1rem;}
-  .sidebar-brand { border-bottom: none; padding: 0.5rem; }
-  .sidebar-nav { display: none; /* simple responsive approach: hide nav or make horizontal */ }
-  .content-area { padding: 1rem; }
-  .header { display: none; }
+  .dashboard-grid { 
+    grid-template-columns: 1fr; 
+    gap: 1rem;
+    height: auto !important; /* Override inline heights */
+  }
+  /* 將佈局改為垂直，且將原本在左邊的 Sidebar 移到下方變成底端導覽列 */
+  .dashboard-container { 
+    flex-direction: column-reverse; 
+  }
+  .sidebar { 
+    width: 100%; 
+    height: 65px; 
+    flex-direction: row; 
+    align-items: center; 
+    justify-content: space-around; 
+    padding: 0; 
+    border-right: none; 
+    border-top: 1px solid var(--border-color);
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(20px);
+    z-index: 50;
+  }
+  .sidebar-brand, .sidebar-footer { 
+    display: none; 
+  }
+  .sidebar-nav { 
+    display: flex; 
+    flex-direction: row; 
+    width: 100%; 
+    justify-content: space-evenly; 
+    gap: 0;
+  }
+  .sidebar-nav .nav-item {
+    flex-direction: column;
+    padding: 8px 4px;
+    font-size: 0.65rem;
+    gap: 4px;
+    background: transparent;
+    border-radius: 0;
+    color: var(--text-secondary);
+  }
+  .sidebar-nav .nav-item.active {
+    color: var(--accent-color);
+    background: transparent;
+  }
+  .main-wrapper {
+    height: calc(100vh - 65px);
+  }
+  .content-area { 
+    padding: 0.75rem; 
+    overflow-y: auto; /* 手機版必須允許捲動 */
+  }
+  /* 讓每一直欄在手機上不要被 hidden 甚至高度卡死 */
+  .dashboard-grid > div {
+    height: auto !important;
+    overflow: visible !important;
+    gap: 1rem !important;
+  }
+  .module-card {
+    height: auto !important;
+    min-height: 350px;
+  }
 }
