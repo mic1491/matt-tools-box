@@ -3,16 +3,7 @@
 import './globals.css';
 import 'react-grid-layout/css/styles.css';
 import { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
-
-// 要避免 SSR 直接專属 Client 的 drag library - 必須用 dynamic + WidthProvider
-const ResponsiveGridLayout = dynamic(
-  async () => {
-    const { Responsive, WidthProvider } = await import('react-grid-layout');
-    return WidthProvider(Responsive);
-  },
-  { ssr: false }
-);
+import { ResponsiveGridLayout } from 'react-grid-layout';
 import { 
   LayoutDashboard, 
   Calendar as CalendarIcon, 
@@ -263,7 +254,10 @@ const DriveModule = ({ style, driveEmbedUrl }) => {
 export default function Dashboard() {
   const [time, setTime] = useState('');
   const contentRef = useRef(null);
+  const gridContainerRef = useRef(null);
+  const [gridWidth, setGridWidth] = useState(1200);
   const [isMobile, setIsMobile] = useState(false);
+  const [isClient, setIsClient] = useState(false); // 防止 SSR 水和誘發生
   const [gridLayout, setGridLayout] = useState(DEFAULT_LAYOUT);
   
   // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive', 'bookmark'
@@ -276,11 +270,19 @@ export default function Dashboard() {
 
   // 偵測手機與讀取存儲的佈局
   useEffect(() => {
+    setIsClient(true);
     setIsMobile(window.innerWidth <= 768);
     setGridLayout(loadLayout());
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    const measure = () => {
+      if (gridContainerRef.current) {
+        setGridWidth(gridContainerRef.current.offsetWidth);
+      }
+      setIsMobile(window.innerWidth <= 768);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
   }, []);
 
   const handleLayoutChange = (layout) => {
@@ -761,8 +763,8 @@ export default function Dashboard() {
             
             {/* 首頁總覽 */}
             {activeTab === 'dashboard' && (
-              isMobile ? (
-                // === 手機版：固定排版 ===
+              (isMobile || !isClient) ? (
+                // === 手機版 / 首次載入：固定排版 ===
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <ImageCarousel style={{ height: '250px', flexShrink: 0 }} />
                   <TodoModule style={{ minHeight: '280px' }} />
@@ -774,6 +776,7 @@ export default function Dashboard() {
                 </div>
               ) : (
                 // === 桌機版：RGL 拖曳網格 ===
+                <div ref={gridContainerRef} style={{ width: '100%' }}>
                 <ResponsiveGridLayout
                   className="layout"
                   layouts={{ lg: gridLayout }}
@@ -781,6 +784,7 @@ export default function Dashboard() {
                   cols={{ lg: 12, md: 10, sm: 6 }}
                   rowHeight={60}
                   margin={[16, 16]}
+                  width={gridWidth}
                   draggableHandle=".drag-handle"
                   onLayoutChange={(l) => handleLayoutChange(l)}
                   useCSSTransforms={true}
@@ -815,6 +819,7 @@ export default function Dashboard() {
                     <div className="drag-handle"><GripHorizontal size={14} /></div>
                   </div>
                 </ResponsiveGridLayout>
+                </div>
               )
             )}
 
