@@ -15,9 +15,14 @@ import {
   Cloud,
   CheckCircle2,
   Upload,
-  ExternalLink
+  ExternalLink,
+  Bookmark,
+  Image as ImageIcon,
+  Play,
+  Pause,
+  Plus
 } from 'lucide-react';
-import { fetchMemos, addMemo, deleteMemo, uploadFileToDrive } from '@/lib/api';
+import { fetchMemos, addMemo, deleteMemo, uploadFileToDrive, fetchBookmarks, addBookmark, deleteBookmark } from '@/lib/api';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
@@ -186,10 +191,55 @@ const DriveModule = ({ style, driveEmbedUrl }) => {
   );
 };
 
+// 子元件：照片輪播模組 (移至外層)
+const ImageCarouselModule = ({ style }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(true);
+  
+  // 輕巧的照片輪播 (使用 Unsplash 作為範例，支援外部連結抓取不用上傳)
+  const images = [
+    'https://images.unsplash.com/photo-1542831371-29b0f74f9713?auto=format&fit=crop&q=80&w=600',
+    'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&q=80&w=600',
+    'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?auto=format&fit=crop&q=80&w=600'
+  ];
+
+  useEffect(() => {
+    let timer;
+    if (isPlaying) {
+      timer = setInterval(() => {
+        setCurrentIndex((prev) => (prev + 1) % images.length);
+      }, 3500); // 3.5秒輪播
+    }
+    return () => clearInterval(timer);
+  }, [isPlaying, images.length]);
+
+  return (
+    <div className="module-card" style={{ ...style, position: 'relative', overflow: 'hidden', padding: 0 }}>
+      {images.map((img, index) => (
+        <img 
+          key={img}
+          src={img} 
+          alt={`carousel-${index}`} 
+          style={{ 
+            width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0,
+            opacity: currentIndex === index ? 1 : 0, transition: 'opacity 0.8s ease-in-out' 
+          }} 
+        />
+      ))}
+      <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)', borderRadius: '20px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <button onClick={() => setIsPlaying(!isPlaying)} style={{ background: 'transparent', border: 'none', color: 'var(--text-color)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+          {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
 export default function Dashboard() {
   const [time, setTime] = useState('');
   
-  // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive'
+  // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive', 'bookmark'
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // 備忘錄狀態
@@ -198,6 +248,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+
+  // 書籤狀態
+  const [bookmarks, setBookmarks] = useState([]);
+  const [newBookmarkUrl, setNewBookmarkUrl] = useState('');
+  const [newBookmarkTitle, setNewBookmarkTitle] = useState('');
+  const [bLoading, setBLoading] = useState(false);
+  const [bSaving, setBSaving] = useState(false);
+  const [bStatusMsg, setBStatusMsg] = useState('');
 
   // Google Drive URL 修改為您的 ID
   const driveEmbedUrl = 'https://drive.google.com/embeddedfolderview?id=1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP#grid';
@@ -220,18 +278,52 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // 載入多筆備忘錄
+  // 載入多筆備忘錄與書籤
   useEffect(() => {
-    const loadMemos = async () => {
+    const loadData = async () => {
       setLoading(true);
-      const res = await fetchMemos();
-      if (Array.isArray(res)) {
-        setMemos(res);
-      }
+      setBLoading(true);
+      const [mRes, bRes] = await Promise.all([fetchMemos(), fetchBookmarks()]);
+      if (Array.isArray(mRes)) setMemos(mRes);
+      if (Array.isArray(bRes)) setBookmarks(bRes);
       setLoading(false);
+      setBLoading(false);
     };
-    loadMemos();
+    loadData();
   }, []);
+
+  const handleSaveBookmark = async () => {
+    if (!newBookmarkUrl.trim()) return;
+    setBSaving(true);
+    setBStatusMsg('抓取網頁資訊...');
+    const urlToSave = newBookmarkUrl.trim();
+    // 呼叫 API，由 GAS 背後負責爬取標題
+    const res = await addBookmark(urlToSave, newBookmarkTitle.trim());
+    
+    if (res && res.success && res.item) {
+      setBookmarks([res.item, ...bookmarks]);
+      setNewBookmarkUrl('');
+      setNewBookmarkTitle('');
+      setBStatusMsg('✓ 加到書籤了！');
+    } else {
+      setBStatusMsg('❌ 加入失敗');
+    }
+    setBSaving(false);
+    setTimeout(() => setBStatusMsg(''), 3000);
+  };
+
+  const handleDeleteBookmark = async (id) => {
+    if (!confirm('確定要刪除這筆書籤嗎？')) return;
+    setBStatusMsg('刪除中...');
+    const res = await deleteBookmark(id);
+    if (res && res.success) {
+      setBookmarks(bookmarks.filter(b => b.id !== id));
+      setBStatusMsg('✓ 已移除書籤');
+    } else {
+      setBStatusMsg('❌ 移除失敗');
+    }
+    setTimeout(() => setBStatusMsg(''), 3000);
+  };
 
   const handleSaveMemo = async () => {
     if (!newMemoText.trim()) return;
@@ -336,6 +428,78 @@ export default function Dashboard() {
     </div>
   );
 
+  // 子元件：書籤選單模組
+  const BookmarkModule = ({ style }) => (
+    <div className="module-card" style={style}>
+      <div className="module-header" style={{ justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <Bookmark size={18} color="var(--accent-color)" />
+          常用網站書籤
+        </div>
+        {bStatusMsg && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{bStatusMsg}</span>}
+      </div>
+      
+      <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: 'rgba(255,255,255,0.85)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input 
+            type="text" 
+            placeholder="貼上網址 URL (例：https://google.com)..."
+            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+            value={newBookmarkUrl}
+            onChange={(e) => setNewBookmarkUrl(e.target.value)}
+          />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <input 
+              type="text" 
+              placeholder="(選填) 自訂標題，若留空將自動透過 Google 背景抓取"
+              style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+              value={newBookmarkTitle}
+              onChange={(e) => setNewBookmarkTitle(e.target.value)}
+            />
+            <button className="save-btn" onClick={handleSaveBookmark} disabled={bSaving || !newBookmarkUrl.trim()} style={{ margin: 0, minWidth: '100px' }}>
+              {bSaving ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
+              {bSaving ? '處理中' : '加入書籤'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', backgroundColor: 'rgba(255,255,255,0.4)' }}>
+        {bLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+            <Loader2 className="animate-spin" style={{ marginRight: '8px' }} /> 讀取中...
+          </div>
+        ) : bookmarks.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0' }}>
+            還沒有加入書籤喔，從上面貼上 URL 試試看！
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {bookmarks.map(bm => (
+              <div key={bm.id} style={{ 
+                background: 'rgba(255,255,255,0.95)', border: '1px solid var(--border-color)', borderRadius: '10px', 
+                padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.03)', transition: 'transform 0.2s, box-shadow 0.2s'
+              }} className="bookmark-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <a href={bm.url} target="_blank" rel="noreferrer" style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-color)', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {bm.title || bm.url}
+                  </a>
+                  <button onClick={() => handleDeleteBookmark(bm.id)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', padding: '4px', cursor: 'pointer', flexShrink: 0 }} title="刪除">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <a href={bm.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--accent-color)', textDecoration: 'none', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {bm.url}
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="dashboard-container" style={{
       backgroundImage: `url(${basePath}/bg.png)`,
@@ -365,6 +529,10 @@ export default function Dashboard() {
           <button className={`nav-item ${activeTab === 'memo' ? 'active' : ''}`} onClick={() => setActiveTab('memo')}>
             <StickyNote size={20} />
             雲端備忘錄
+          </button>
+          <button className={`nav-item ${activeTab === 'bookmark' ? 'active' : ''}`} onClick={() => setActiveTab('bookmark')}>
+            <Bookmark size={20} />
+            常用網站書籤
           </button>
           <button className={`nav-item ${activeTab === 'vault' ? 'active' : ''}`} onClick={() => setActiveTab('vault')}>
             <ShieldCheck size={20} />
@@ -399,11 +567,13 @@ export default function Dashboard() {
             {activeTab === 'dashboard' && (
               <div className="dashboard-grid">
                 
-                {/* 第一欄：日曆與待辦 */}
+                {/* 第一欄：輪播、日曆與待辦 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+                  <ImageCarouselModule style={{ flexShrink: 0, height: '160px' }} />
                   <TodoListModule style={{ flexShrink: 0 }} />
-                  <CalendarModule style={{ flex: 1, minHeight: '350px' }} />
+                  <CalendarModule style={{ flex: 1, minHeight: '320px' }} />
                 </div>
+
                 
                 {/* 第二欄：雲端硬碟與備忘錄 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
@@ -419,6 +589,7 @@ export default function Dashboard() {
             {/* 單一 Focus 分頁 */}
             {activeTab === 'calendar' && <CalendarModule style={{ height: '100%' }} />}
             {activeTab === 'memo' && <MemoModule style={{ height: '100%' }} />}
+            {activeTab === 'bookmark' && <BookmarkModule style={{ height: '100%' }} />}
             {activeTab === 'vault' && <VaultModule style={{ height: '100%' }} />}
             {activeTab === 'drive' && <DriveModule driveEmbedUrl={driveEmbedUrl} style={{ height: '100%' }} />}
 

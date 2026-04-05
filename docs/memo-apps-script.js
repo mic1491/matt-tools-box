@@ -9,6 +9,7 @@
 // ============================================================
 
 const SHEET_NAME = '備忘清單';
+const BOOKMARK_SHEET_NAME = '書籤清單';
 
 function initializeSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -40,6 +41,8 @@ function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) || '';
   if (action === 'getMemos') {
     return jsonResponse(getMemos());
+  } else if (action === 'getBookmarks') {
+    return jsonResponse(getBookmarks());
   }
   return jsonResponse({ error: 'Unknown action' });
 }
@@ -57,6 +60,12 @@ function doPost(e) {
       return jsonResponse(result);
     } else if (action === 'uploadFile') {
       const result = uploadFile(body.filename, body.mimeType, body.base64Data, body.folderId);
+      return jsonResponse(result);
+    } else if (action === 'addBookmark') {
+      const result = addBookmark(body.url, body.title);
+      return jsonResponse(result);
+    } else if (action === 'deleteBookmark') {
+      const result = deleteBookmark(body.id);
       return jsonResponse(result);
     }
     
@@ -159,5 +168,101 @@ function uploadFile(filename, mimeType, base64Data, folderId) {
     return { success: true, url: file.getUrl(), id: file.getId() };
   } catch (err) {
     return { success: false, error: '無法上傳檔案：' + err.message };
+  }
+}
+
+// === 書籤操作 CRUD ===
+
+function getBookmarkSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(BOOKMARK_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(BOOKMARK_SHEET_NAME);
+    sheet.appendRow(["ID", "Date", "Title", "URL"]);
+    sheet.getRange("A1:D1").setFontWeight('bold').setBackground('#10b981').setFontColor('#ffffff');
+    sheet.setColumnWidth(3, 300);
+    sheet.setColumnWidth(4, 400);
+  }
+  return sheet;
+}
+
+function getBookmarks() {
+  const sheet = getBookmarkSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  
+  const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const marks = data.map(row => ({
+    id: row[0],
+    createdAt: row[1],
+    title: String(row[2]),
+    url: String(row[3])
+  }));
+  
+  return marks.reverse();
+}
+
+function fetchTitleSafely(url) {
+  try {
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (response.getResponseCode() === 200) {
+      const content = response.getContentText();
+      const match = content.match(/<title>([\s\S]*?)<\/title>/i);
+      if (match && match[1]) {
+        let t = match[1].trim();
+        t = t.replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        return t;
+      }
+    }
+  } catch (err) {
+  }
+  return '';
+}
+
+function addBookmark(url, customTitle) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getBookmarkSheet();
+    const id = Utilities.getUuid();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy/MM/dd HH:mm:ss");
+    
+    let title = customTitle || '';
+    if (!title) {
+      const fetchedTitle = fetchTitleSafely(url);
+      title = fetchedTitle || '無標題 (無法抓取)';
+    }
+    
+    sheet.appendRow([id, dateStr, title, url]);
+    SpreadsheetApp.flush();
+    return { success: true, item: { id: id, createdAt: dateStr, title: title, url: url } };
+  } catch (err) {
+    return { success: false, error: '新增書籤失敗。' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function deleteBookmark(id) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getBookmarkSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false, error: '無資料' };
+    
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === id) {
+        sheet.deleteRow(i + 2);
+        SpreadsheetApp.flush();
+        return { success: true };
+      }
+    }
+    return { success: false, error: '找不到該筆紀錄' };
+  } catch (err) {
+    return { success: false, error: '刪除失敗' };
+  } finally {
+    lock.releaseLock();
   }
 }
