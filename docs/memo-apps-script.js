@@ -42,6 +42,9 @@ function doPost(e) {
     } else if (action === 'deleteMemo') {
       const result = deleteMemo(body.id);
       return jsonResponse(result);
+    } else if (action === 'uploadFile') {
+      const result = uploadFile(body.filename, body.mimeType, body.base64Data, body.folderId);
+      return jsonResponse(result);
     }
     
     return jsonResponse({ error: 'Unknown action' });
@@ -128,5 +131,20 @@ function deleteMemo(id) {
     return { success: false, error: '刪除失敗' };
   } finally {
     lock.releaseLock();
+  }
+}
+
+// === 雲端硬碟操作 ===
+
+function uploadFile(filename, mimeType, base64Data, folderId) {
+  try {
+    // 若沒有傳入 folderId，請確認呼叫端是否有提供。以下假設 folderId 必定存在。
+    const folder = DriveApp.getFolderById(folderId);
+    // 移除 base64 字串前面的 data:MIME_TYPE;base64, 前綴（如果有的話在前端處理，這裡預設收純 base64 字串）
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, filename);
+    const file = folder.createFile(blob);
+    return { success: true, url: file.getUrl(), id: file.getId() };
+  } catch (err) {
+    return { success: false, error: '無法上傳檔案：' + err.message };
   }
 }

@@ -13,9 +13,11 @@ import {
   Loader2,
   Trash2,
   Cloud,
-  CheckCircle2
+  CheckCircle2,
+  Upload,
+  ExternalLink
 } from 'lucide-react';
-import { fetchMemos, addMemo, deleteMemo } from '@/lib/api';
+import { fetchMemos, addMemo, deleteMemo, uploadFileToDrive } from '@/lib/api';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
@@ -120,18 +122,69 @@ const VaultModule = ({ style }) => (
   </div>
 );
 
-// 子元件：Google Drive 模組 (移至外層防止 re-render 閃爍)
-const DriveModule = ({ style, driveEmbedUrl }) => (
-  <div className="module-card" style={style}>
-    <div className="module-header">
-      <Cloud size={18} color="var(--accent-color)" />
-      個人雲端硬碟區
+// 子元件：Google Drive 模組 (移至外層防止 re-render 閃爍，加入上傳功能)
+const DriveModule = ({ style, driveEmbedUrl }) => {
+  const [uploading, setUploading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+  
+  const FOLDER_ID = '1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP';
+  const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      if (confirm(`這份檔案超過 20MB (${(file.size / 1024 / 1024).toFixed(1)}MB)，透過腳本上傳可能會中斷。\n是否要為您開啟 Google 雲端硬碟原廠網頁來傳輸？`)) {
+        window.open(`https://drive.google.com/drive/folders/${FOLDER_ID}`, '_blank');
+      }
+      e.target.value = ''; // reset
+      return;
+    }
+
+    setUploading(true);
+    setStatusMsg(`上傳中: ${file.name}...`);
+    
+    const res = await uploadFileToDrive(file, FOLDER_ID);
+    
+    if (res && res.success) {
+      setStatusMsg('✓ 上傳成功！因快取可能需幾分鐘才會在下方顯示');
+    } else {
+      setStatusMsg('❌ 上傳失敗: ' + (res.error || '未知錯誤'));
+    }
+    
+    setUploading(false);
+    e.target.value = ''; // reset
+    setTimeout(() => setStatusMsg(''), 5000);
+  };
+
+  return (
+    <div className="module-card" style={style}>
+      <div className="module-header" style={{ justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <Cloud size={18} color="var(--accent-color)" />
+          個人雲端硬碟區
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {statusMsg && <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{statusMsg}</span>}
+          
+          <label style={{ cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'var(--accent-color)', color: '#fff', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 500, opacity: uploading ? 0.7 : 1 }}>
+            {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+            {uploading ? '處理中' : '上傳小檔案'}
+            <input type="file" style={{ display: 'none' }} onChange={handleFileChange} disabled={uploading} />
+          </label>
+          
+          <a href={`https://drive.google.com/drive/folders/${FOLDER_ID}`} target="_blank" rel="noreferrer" title="開啟原廠雲端硬碟" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.05)', padding: '4px', borderRadius: '4px' }}>
+            <ExternalLink size={14} />
+          </a>
+        </div>
+      </div>
+      <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
+        <iframe src={driveEmbedUrl} className="iframe-wrapper" title="Google Drive" />
+      </div>
     </div>
-    <div className="module-body" style={{ padding: 0, overflow: 'hidden' }}>
-      <iframe src={driveEmbedUrl} className="iframe-wrapper" title="Google Drive" />
-    </div>
-  </div>
-);
+  );
+};
 
 export default function Dashboard() {
   const [time, setTime] = useState('');
