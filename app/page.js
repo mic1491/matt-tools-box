@@ -10,13 +10,17 @@ import {
   Settings,
   Clock,
   Save,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
-import { fetchMemo, saveMemo } from '@/lib/api';
+import { fetchMemos, addMemo, deleteMemo } from '@/lib/api';
 
 export default function Dashboard() {
   const [time, setTime] = useState('');
-  const [memoText, setMemoText] = useState('');
+  
+  // 備忘錄狀態
+  const [memos, setMemos] = useState([]);
+  const [newMemoText, setNewMemoText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
@@ -40,33 +44,58 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // 載入備忘錄
+  // 載入多筆備忘錄
   useEffect(() => {
-    const loadMemo = async () => {
+    const loadMemos = async () => {
       setLoading(true);
-      const res = await fetchMemo();
-      if (res && res.content !== undefined) {
-        setMemoText(res.content);
-        setStatusMsg('已載入最高版本');
-      } else if (res && res.error) {
-        setStatusMsg('連線錯誤或未設定 API');
+      const res = await fetchMemos();
+      if (Array.isArray(res)) {
+        setMemos(res);
+        if (res.length > 0) {
+          setStatusMsg('已載入歷年清單');
+        }
+      } else {
+        setStatusMsg('連線錯誤或尚未設定 API');
       }
       setLoading(false);
       setTimeout(() => setStatusMsg(''), 3000);
     };
-    loadMemo();
+    loadMemos();
   }, []);
 
+  // 新增備忘錄
   const handleSaveMemo = async () => {
+    if (!newMemoText.trim()) return;
+    
     setSaving(true);
     setStatusMsg('儲存中...');
-    const res = await saveMemo(memoText);
-    if (res && res.success) {
-      setStatusMsg('✓ 儲存成功');
+    const contentToSave = newMemoText.trim();
+    const res = await addMemo(contentToSave);
+    
+    if (res && res.success && res.item) {
+      // 將新紀錄加到陣列最前面
+      setMemos([res.item, ...memos]);
+      setNewMemoText(''); // 清空輸入框
+      setStatusMsg('✓ 新增成功');
     } else {
       setStatusMsg('❌ 儲存失敗');
     }
     setSaving(false);
+    setTimeout(() => setStatusMsg(''), 3000);
+  };
+
+  // 刪除備忘錄
+  const handleDeleteMemo = async (id) => {
+    if (!confirm('確定要刪除這筆備忘錄嗎？')) return;
+    
+    setStatusMsg('刪除中...');
+    const res = await deleteMemo(id);
+    if (res && res.success) {
+      setMemos(memos.filter(m => m.id !== id));
+      setStatusMsg('✓ 已刪除');
+    } else {
+      setStatusMsg('❌ 刪除失敗');
+    }
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
@@ -108,7 +137,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="main-wrapper">
         <header className="header">
-          <div className="header-title">儀表板</div>
+          <div className="header-title">個人儀表板</div>
           <div className="header-widgets">
             <Clock size={16} /> {time}
           </div>
@@ -118,49 +147,96 @@ export default function Dashboard() {
           <div className="dashboard-grid animate-fade">
             
             {/* 左側欄位：備忘錄 + 日曆 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
               
-              {/* 備忘錄模組 */}
-              <div className="module-card" style={{ flex: 1 }}>
-                <div className="module-header">
-                  <StickyNote size={18} className="text-accent-color" color="var(--accent-color)" />
-                  同步備忘錄
-                </div>
-                <div className="module-body">
-                  {loading ? (
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'var(--text-secondary)' }}>
-                      <Loader2 className="animate-spin" style={{marginRight: '8px'}} /> 載入中...
-                    </div>
-                  ) : (
-                    <>
-                      <textarea 
-                        className="memo-textarea" 
-                        placeholder="在這裡輸入您的隨機筆記或代辦事項，會自動同步到雲端試算表..."
-                        value={memoText}
-                        onChange={(e) => setMemoText(e.target.value)}
-                      />
-                      <button className="save-btn" onClick={handleSaveMemo} disabled={saving}>
-                        {saving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}
-                        {saving ? '處理中' : '儲存'}
-                      </button>
-                      {statusMsg && <div className="status-text">{statusMsg}</div>}
-                    </>
-                  )}
-                </div>
-              </div>
-
               {/* 日曆模組 */}
-              <div className="module-card" style={{ height: '350px' }}>
+              <div className="module-card" style={{ height: '350px', flexShrink: 0 }}>
                 <div className="module-header">
                   <CalendarIcon size={18} color="var(--accent-color)" />
                   Google 日曆
                 </div>
                 <div className="module-body" style={{ padding: 0 }}>
                   <iframe 
-                    src="https://calendar.google.com/calendar/embed?height=300&wkst=1&bgcolor=%23ffffff&ctz=Asia%2FTaipei&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&src=ZW4udGFpd2FuI2hvbGlkYXlAZ3JvdXAudi5jYWxlbmRhci5nb29nbGUuY29t&color=%230B8043" 
+                    src="https://calendar.google.com/calendar/embed?src=mic1491%40gmail.com&height=300&wkst=1&bgcolor=%23ffffff&ctz=Asia%2FTaipei&showTitle=0&showPrint=0&showTabs=0&showCalendars=0&showTz=0&color=%230B8043" 
                     className="iframe-wrapper"
                     title="Google Calendar"
                   />
+                </div>
+              </div>
+
+              {/* 多筆備忘清單模組 */}
+              <div className="module-card" style={{ flex: 1, minHeight: '400px', display: 'flex', flexDirection: 'column' }}>
+                <div className="module-header" style={{ justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    <StickyNote size={18} color="var(--accent-color)" />
+                    備忘清單紀錄
+                  </div>
+                  {statusMsg && <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{statusMsg}</span>}
+                </div>
+                
+                {/* 備忘錄輸入區 */}
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', backgroundColor: '#f8fafc' }}>
+                  <textarea 
+                    className="memo-textarea" 
+                    placeholder="輸入新的待辦事項或筆記，點擊儲存加入清單..."
+                    value={newMemoText}
+                    onChange={(e) => setNewMemoText(e.target.value)}
+                    style={{ height: '80px', marginBottom: '0.75rem' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button className="save-btn" onClick={handleSaveMemo} disabled={saving || !newMemoText.trim()} style={{ margin: 0 }}>
+                      {saving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}
+                      {saving ? '儲存中...' : '加入清單'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 歷史紀錄列表區 */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', backgroundColor: '#ffffff' }}>
+                  {loading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
+                      <Loader2 className="animate-spin" style={{ marginRight: '8px' }} /> 讀取清單中...
+                    </div>
+                  ) : memos.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '2rem 0' }}>
+                      目前沒有任何備忘紀錄，來新增第一筆吧！
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {memos.map(memo => (
+                        <div key={memo.id} style={{ 
+                          background: '#f8fafc', 
+                          border: '1px solid var(--border-color)', 
+                          borderRadius: '8px', 
+                          padding: '1rem',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.5rem'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>🗓 {memo.createdAt}</span>
+                            <button 
+                              onClick={() => handleDeleteMemo(memo.id)}
+                              style={{ 
+                                background: 'transparent', 
+                                border: 'none', 
+                                color: 'var(--text-secondary)', 
+                                padding: '4px',
+                                width: 'auto',
+                                cursor: 'pointer' 
+                              }}
+                              title="刪除"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                          <div style={{ fontSize: '0.95rem', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                            {memo.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
