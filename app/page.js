@@ -691,8 +691,8 @@ export default function Dashboard() {
                 
                 {/* 第一欄：輪播、日曆與待辦 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'visible' }}>
-                  <ImageCarousel style={{ flexShrink: 0, height: '180px' }} />
-                  <TodoModule style={{ flexShrink: 0, maxHeight: '350px' }} />
+                  <ImageCarousel style={{ flexShrink: 0, height: '280px' }} />
+                  <TodoModule style={{ flexShrink: 0, maxHeight: '300px' }} />
                   <CalendarModule style={{ flex: 1, minHeight: '320px' }} />
                 </div>
 
