@@ -22,7 +22,29 @@ import {
   Pause,
   Plus
 } from 'lucide-react';
-import { fetchMemos, addMemo, deleteMemo, uploadFileToDrive, fetchBookmarks, addBookmark, deleteBookmark } from '@/lib/api';
+import { 
+  fetchMemos, addMemo, deleteMemo, uploadFileToDrive, 
+  fetchBookmarks, addBookmark, deleteBookmark,
+  fetchTodos, addTodo, toggleTodo, deleteTodo,
+  fetchPhotos, uploadCarouselPhotoToDrive, deletePhoto
+} from '@/lib/api';
+
+// 獨立時鐘元件：防止整個 Dashboard 每秒重新 re-render
+const ClockWidget = () => {
+  const [time, setTime] = useState('');
+  useEffect(() => {
+    const updateTime = () => {
+      setTime(new Date().toLocaleString('zh-TW', {
+        hour12: false, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }));
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <div className="header-widgets"><Clock size={16} /> {time}</div>;
+};
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
@@ -74,42 +96,7 @@ const CalendarModule = ({ style }) => (
   </div>
 );
 
-// 子元件：當月重要任務模組 (移至外層防止 re-render 閃爍)
-const TodoListModule = ({ style }) => (
-  <div className="module-card" style={style}>
-    <div className="module-header">
-      <CheckCircle2 size={18} color="var(--accent-color)" />
-      當月重要任務清單
-    </div>
-    <div className="module-body" style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {[
-          { id: 1, text: '繳納本期燃料費及牌照稅', date: '04/10' },
-          { id: 2, text: '結算上月工作室信用卡帳單', date: '04/15' },
-          { id: 3, text: '回覆系統開發專案客戶信件', date: '04/18' },
-          { id: 4, text: '進行每週專案同步例會', date: '04/22' }
-        ].map((item) => (
-          <div key={item.id} style={{ 
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '0.75rem', background: 'rgba(255,255,255,0.7)',
-            borderRadius: '8px', border: '1px solid var(--border-color)'
-          }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{item.text}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>
-              {item.date}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div style={{ marginTop: 'auto', paddingTop: '1rem', textAlign: 'center' }}>
-        <button style={{
-          background: 'transparent', border: '1px dashed var(--accent-color)', color: 'var(--accent-color)',
-          padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem', width: '100%'
-        }}>+ 新增任務項目</button>
-      </div>
-    </div>
-  </div>
-);
+// TodoListModule 改為在 Dashboard 內部實作，以存取 handlers
 
 // 子元件：密碼本模組 (移至外層防止 re-render 閃爍)
 const VaultModule = ({ style }) => (
@@ -191,53 +178,9 @@ const DriveModule = ({ style, driveEmbedUrl }) => {
   );
 };
 
-// 子元件：照片輪播模組 (移至外層)
-const ImageCarouselModule = ({ style }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
-  
-  // 輕巧的照片輪播 (使用 Unsplash 作為範例，支援外部連結抓取不用上傳)
-  const images = [
-    'https://images.unsplash.com/photo-1542831371-29b0f74f9713?auto=format&fit=crop&q=80&w=600',
-    'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&q=80&w=600',
-    'https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?auto=format&fit=crop&q=80&w=600'
-  ];
-
-  useEffect(() => {
-    let timer;
-    if (isPlaying) {
-      timer = setInterval(() => {
-        setCurrentIndex((prev) => (prev + 1) % images.length);
-      }, 3500); // 3.5秒輪播
-    }
-    return () => clearInterval(timer);
-  }, [isPlaying, images.length]);
-
-  return (
-    <div className="module-card" style={{ ...style, position: 'relative', overflow: 'hidden', padding: 0 }}>
-      {images.map((img, index) => (
-        <img 
-          key={img}
-          src={img} 
-          alt={`carousel-${index}`} 
-          style={{ 
-            width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0,
-            opacity: currentIndex === index ? 1 : 0, transition: 'opacity 0.8s ease-in-out' 
-          }} 
-        />
-      ))}
-      <div style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(4px)', borderRadius: '20px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-        <button onClick={() => setIsPlaying(!isPlaying)} style={{ background: 'transparent', border: 'none', color: 'var(--text-color)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-          {isPlaying ? <Pause size={14} /> : <Play size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-};
-
+// ImageCarousel 改為在 Dashboard 內部實作，以存取相簿狀態
 
 export default function Dashboard() {
-  const [time, setTime] = useState('');
   
   // Tabs: 'dashboard', 'calendar', 'memo', 'vault', 'drive', 'bookmark'
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -257,41 +200,80 @@ export default function Dashboard() {
   const [bSaving, setBSaving] = useState(false);
   const [bStatusMsg, setBStatusMsg] = useState('');
 
+  // 待辦狀態
+  const [todos, setTodos] = useState([]);
+  const [newTodoText, setNewTodoText] = useState('');
+  const [tSaving, setTSaving] = useState(false);
+
+  // 輪播相簿狀態
+  const [photos, setPhotos] = useState([]);
+  const [pUploading, setPUploading] = useState(false);
+
+  // 初始化預設兜底圖片
+  const fallbackImages = [
+    'https://images.unsplash.com/photo-1542831371-29b0f74f9713?auto=format&fit=crop&q=80&w=600',
+    'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&q=80&w=600'
+  ];
+
   // Google Drive URL 修改為您的 ID
   const driveEmbedUrl = 'https://drive.google.com/embeddedfolderview?id=1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP#grid';
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTime(now.toLocaleString('zh-TW', {
-        hour12: false,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-      }));
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // 載入多筆備忘錄與書籤
+  // 載入所有資料
   useEffect(() => {
     const loadData = async () => {
-      setLoading(true);
-      setBLoading(true);
-      const [mRes, bRes] = await Promise.all([fetchMemos(), fetchBookmarks()]);
+      setLoading(true); setBLoading(true);
+      const [mRes, bRes, tRes, pRes] = await Promise.all([
+        fetchMemos(), fetchBookmarks(), fetchTodos(), fetchPhotos()
+      ]);
       if (Array.isArray(mRes)) setMemos(mRes);
       if (Array.isArray(bRes)) setBookmarks(bRes);
-      setLoading(false);
-      setBLoading(false);
+      if (Array.isArray(tRes)) setTodos(tRes);
+      if (Array.isArray(pRes)) setPhotos(pRes);
+      setLoading(false); setBLoading(false);
     };
     loadData();
   }, []);
+  // ======= Totos Handlers =======
+  const handleSaveTodo = async () => {
+    if (!newTodoText.trim()) return;
+    setTSaving(true);
+    const res = await addTodo(newTodoText.trim());
+    if (res && res.success && res.item) setTodos([res.item, ...todos]);
+    setNewTodoText('');
+    setTSaving(false);
+  };
 
+  const handleToggleTodo = async (id, isDone) => {
+    // 樂觀更新 (Optimistic UI) 讓打勾反應更快
+    const nextTodos = todos.map(t => t.id === id ? { ...t, isDone } : t);
+    setTodos(nextTodos);
+    await toggleTodo(id, isDone);
+  };
+
+  const handleDeleteTodo = async (id) => {
+    if (!confirm('確定刪除此任務？')) return;
+    setTodos(todos.filter(t => t.id !== id));
+    await deleteTodo(id);
+  };
+
+  // ======= Photos Handlers =======
+  const handleUploadPhoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPUploading(true);
+    // 傳送圖片到 Drive Folder
+    const res = await uploadCarouselPhotoToDrive(file, '1F2HBCbPynAFYlqvn20L1q8cOdxWH0xxP');
+    if (res && res.success && res.item) setPhotos([res.item, ...photos]);
+    else alert('上傳失敗：' + (res.error || '不明錯誤'));
+    setPUploading(false);
+    e.target.value = '';
+  };
+
+  const handleDeletePhoto = async (id, fileId) => {
+    if (!confirm('確定刪除這張照片？雲端檔案也會被丟入垃圾桶喔！')) return;
+    setPhotos(photos.filter(p => p.id !== id));
+    await deletePhoto(id, fileId);
+  };
   const handleSaveBookmark = async () => {
     if (!newBookmarkUrl.trim()) return;
     setBSaving(true);
@@ -356,7 +338,85 @@ export default function Dashboard() {
     setTimeout(() => setStatusMsg(''), 3000);
   };
 
-  // 子部份元件已移至外層以防止不必要的 re-render (閃爍)
+  // 子元件：待辦清單模組 (加入動態 State 綁定與完成視覺)
+  const TodoModule = ({ style }) => (
+    <div className="module-card" style={{ ...style, display: 'flex', flexDirection: 'column' }}>
+      <div className="module-header" style={{ flexShrink: 0 }}>
+        <CheckCircle2 size={18} color="var(--accent-color)" />
+        重要任務清單
+      </div>
+      <div className="module-body" style={{ padding: '1rem', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingRight: '4px' }}>
+          {todos.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '1rem 0', fontSize: '0.85rem' }}>尚無任務</div>
+          ) : todos.map(item => (
+            <div key={item.id} style={{ 
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              padding: '0.75rem', background: item.isDone ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.9)',
+              borderRadius: '8px', border: '1px solid var(--border-color)',
+              opacity: item.isDone ? 0.7 : 1, transition: 'all 0.2s'
+            }}>
+              <input type="checkbox" checked={item.isDone} onChange={(e) => handleToggleTodo(item.id, e.target.checked)} style={{ cursor: 'pointer', transform: 'scale(1.2)' }} />
+              <span style={{ fontSize: '0.9rem', fontWeight: 500, flex: 1, textDecoration: item.isDone ? 'line-through' : 'none', color: item.isDone ? 'var(--text-secondary)' : 'var(--text-color)', wordBreak: 'break-all' }}>
+                {item.text}
+              </span>
+              <button onClick={() => handleDeleteTodo(item.id)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><Trash2 size={14}/></button>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 'auto', paddingTop: '1rem', display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+          <input type="text" placeholder="輸入任務..." value={newTodoText} onChange={e => setNewTodoText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveTodo(); }} style={{ flex: 1, padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '0.85rem' }} />
+          <button onClick={handleSaveTodo} disabled={tSaving || !newTodoText} style={{ background: 'var(--accent-color)', color: '#fff', border: 'none', padding: '0 1rem', borderRadius: '6px', cursor: !newTodoText ? 'not-allowed' : 'pointer', fontSize: '0.85rem' }}>
+            {tSaving ? <Loader2 size={14} className="animate-spin" /> : '新增'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // 子元件：動態相簿輪播
+  const ImageCarousel = ({ style }) => {
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(true);
+    const displayList = photos.length > 0 ? photos : fallbackImages.map(url => ({ id: url, url, isFallback: true }));
+    
+    useEffect(() => {
+      let timer;
+      if (isPlaying && displayList.length > 1) {
+        timer = setInterval(() => setCurrentIndex(prev => (prev + 1) % displayList.length), 4000);
+      }
+      return () => clearInterval(timer);
+    }, [isPlaying, displayList.length]);
+
+    return (
+      <div className="module-card" style={{ ...style, position: 'relative', overflow: 'hidden', padding: 0 }}>
+        {displayList.map((img, index) => (
+          <img key={img.id} src={img.url} alt="carousel" style={{ 
+            width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0,
+            opacity: currentIndex === index ? 1 : 0, transition: 'opacity 0.8s ease-in-out' 
+          }} />
+        ))}
+        {photos.length === 0 && <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '0.7rem', padding: '2px 6px', borderRadius: '4px' }}>預設背景</div>}
+        
+        <div style={{ position: 'absolute', bottom: '8px', right: '8px', display: 'flex', gap: '6px' }}>
+          <label style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)', borderRadius: '20px', padding: '4px 8px', display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '4px', fontSize: '0.75rem', fontWeight: 500, opacity: pUploading ? 0.7 : 1 }}>
+            {pUploading ? <Loader2 size={12} className="animate-spin"/> : <ImageIcon size={12}/>} 此相框上傳
+            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUploadPhoto} disabled={pUploading} />
+          </label>
+          <button onClick={() => setIsPlaying(!isPlaying)} style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(4px)', borderRadius: '20px', border: 'none', color: 'var(--text-color)', cursor: 'pointer', padding: '4px 8px', display: 'flex', alignItems: 'center' }}>
+            {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+          </button>
+        </div>
+
+        {displayList[currentIndex] && !displayList[currentIndex].isFallback && (
+          <button onClick={() => handleDeletePhoto(displayList[currentIndex].id, displayList[currentIndex].fileId)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%', padding: '6px', color: 'red', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} title="刪除此照片">
+            <Trash2 size={14} />
+          </button>
+        )}
+      </div>
+    );
+  };
+
 
   // 子元件：備忘錄模組
   const MemoModule = ({ style }) => (
@@ -555,9 +615,7 @@ export default function Dashboard() {
       <main className="main-wrapper" style={{ zIndex: 1 }}>
         <header className="header">
           <div className="header-title">個人儀表板</div>
-          <div className="header-widgets">
-            <Clock size={16} /> {time}
-          </div>
+          <ClockWidget />
         </header>
 
         <section className="content-area">
@@ -569,8 +627,8 @@ export default function Dashboard() {
                 
                 {/* 第一欄：輪播、日曆與待辦 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
-                  <ImageCarouselModule style={{ flexShrink: 0, height: '160px' }} />
-                  <TodoListModule style={{ flexShrink: 0 }} />
+                  <ImageCarousel style={{ flexShrink: 0, height: '180px' }} />
+                  <TodoModule style={{ flexShrink: 0, maxHeight: '350px' }} />
                   <CalendarModule style={{ flex: 1, minHeight: '320px' }} />
                 </div>
 
@@ -581,8 +639,11 @@ export default function Dashboard() {
                   <MemoModule style={{ flex: 1, minHeight: '350px', display: 'flex', flexDirection: 'column' }} />
                 </div>
                 
-                {/* 第三欄：密碼庫 */}
-                <VaultModule style={{ height: '100%' }} />
+                {/* 第三欄：密碼庫與書籤 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'hidden' }}>
+                  <VaultModule style={{ flexShrink: 0, height: '400px' }} />
+                  <BookmarkModule style={{ flex: 1, display: 'flex', flexDirection: 'column' }} />
+                </div>
               </div>
             )}
 

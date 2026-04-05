@@ -10,6 +10,8 @@
 
 const SHEET_NAME = '備忘清單';
 const BOOKMARK_SHEET_NAME = '書籤清單';
+const TODO_SHEET_NAME = '待辦清單';
+const PHOTO_SHEET_NAME = '輪播相簿';
 
 function initializeSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -43,6 +45,10 @@ function doGet(e) {
     return jsonResponse(getMemos());
   } else if (action === 'getBookmarks') {
     return jsonResponse(getBookmarks());
+  } else if (action === 'getTodos') {
+    return jsonResponse(getTodos());
+  } else if (action === 'getPhotos') {
+    return jsonResponse(getPhotos());
   }
   return jsonResponse({ error: 'Unknown action' });
 }
@@ -66,6 +72,21 @@ function doPost(e) {
       return jsonResponse(result);
     } else if (action === 'deleteBookmark') {
       const result = deleteBookmark(body.id);
+      return jsonResponse(result);
+    } else if (action === 'addTodo') {
+      const result = addTodo(body.text);
+      return jsonResponse(result);
+    } else if (action === 'toggleTodo') {
+      const result = toggleTodo(body.id, body.isDone);
+      return jsonResponse(result);
+    } else if (action === 'deleteTodo') {
+      const result = deleteTodo(body.id);
+      return jsonResponse(result);
+    } else if (action === 'uploadPhoto') {
+      const result = uploadPhoto(body.filename, body.mimeType, body.base64Data, body.folderId);
+      return jsonResponse(result);
+    } else if (action === 'deletePhoto') {
+      const result = deletePhoto(body.id, body.fileId);
       return jsonResponse(result);
     }
     
@@ -265,4 +286,151 @@ function deleteBookmark(id) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// === 待辦事項 CRUD ===
+
+function getTodoSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(TODO_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(TODO_SHEET_NAME);
+    sheet.appendRow(["ID", "Date", "Text", "IsDone"]);
+    sheet.getRange("A1:D1").setFontWeight('bold').setBackground('#ef4444').setFontColor('#ffffff');
+    sheet.setColumnWidth(3, 400);
+  }
+  return sheet;
+}
+
+function getTodos() {
+  const sheet = getTodoSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const todos = data.map(row => ({ id: row[0], createdAt: row[1], text: String(row[2]), isDone: row[3] === true || row[3] === 'true' || row[3] === 'TRUE' }));
+  return todos.reverse();
+}
+
+function addTodo(text) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getTodoSheet();
+    const id = Utilities.getUuid();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy/MM/dd HH:mm:ss");
+    sheet.appendRow([id, dateStr, text, false]);
+    SpreadsheetApp.flush();
+    return { success: true, item: { id: id, createdAt: dateStr, text: text, isDone: false } };
+  } catch (err) { return { success: false, error: err.message }; } finally { lock.releaseLock(); }
+}
+
+function toggleTodo(id, isDone) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getTodoSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false };
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < data.length; i++) {
+        if (data[i][0] === id) {
+            sheet.getRange(i + 2, 4).setValue(isDone);
+            SpreadsheetApp.flush();
+            return { success: true };
+        }
+    }
+    return { success: false };
+  } catch (err) { return { success: false }; } finally { lock.releaseLock(); }
+}
+
+function deleteTodo(id) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const sheet = getTodoSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: false };
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < data.length; i++) {
+        if (data[i][0] === id) {
+            sheet.deleteRow(i + 2);
+            SpreadsheetApp.flush();
+            return { success: true };
+        }
+    }
+    return { success: false };
+  } catch (err) { return { success: false }; } finally { lock.releaseLock(); }
+}
+
+// === 相簿輪播 CRUD ===
+
+function getPhotoSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(PHOTO_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(PHOTO_SHEET_NAME);
+    sheet.appendRow(["ID", "Date", "FileId", "URL"]);
+    sheet.getRange("A1:D1").setFontWeight('bold').setBackground('#f59e0b').setFontColor('#ffffff');
+    sheet.setColumnWidth(4, 500);
+  }
+  return sheet;
+}
+
+function getPhotos() {
+  const sheet = getPhotoSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const data = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+  const photos = data.map(row => ({ id: row[0], createdAt: row[1], fileId: String(row[2]), url: String(row[3]) }));
+  return photos.reverse();
+}
+
+function uploadPhoto(filename, mimeType, base64Data, folderId) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    const folder = DriveApp.getFolderById(folderId);
+    const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, filename);
+    const file = folder.createFile(blob);
+    
+    // 設定這張圖片為任何人可檢視 (直連預覽用)
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    
+    const fileId = file.getId();
+    const directUrl = 'https://drive.google.com/uc?export=view&id=' + fileId;
+    
+    const sheet = getPhotoSheet();
+    const id = Utilities.getUuid();
+    const dateStr = Utilities.formatDate(new Date(), "Asia/Taipei", "yyyy/MM/dd HH:mm:ss");
+    sheet.appendRow([id, dateStr, fileId, directUrl]);
+    SpreadsheetApp.flush();
+    
+    return { success: true, item: { id: id, createdAt: dateStr, fileId: fileId, url: directUrl } };
+  } catch (err) {
+    return { success: false, error: '上傳照片失敗：' + err.message };
+  } finally { lock.releaseLock(); }
+}
+
+function deletePhoto(id, fileId) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    if (fileId) {
+      try {
+        DriveApp.getFileById(fileId).setTrashed(true);
+      } catch(e) { console.log('丟入垃圾桶發生錯誤', e); }
+    }
+    const sheet = getPhotoSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { success: true };
+    const data = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < data.length; i++) {
+        if (data[i][0] === id) {
+            sheet.deleteRow(i + 2);
+            SpreadsheetApp.flush();
+            return { success: true };
+        }
+    }
+    return { success: true };
+  } catch (err) { return { success: false, error: err.message }; } finally { lock.releaseLock(); }
 }
